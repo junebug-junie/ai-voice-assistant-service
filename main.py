@@ -9,6 +9,7 @@ import numpy as np
 from faster_whisper import WhisperModel
 import requests
 import json
+import tempfile # Import the tempfile module
 
 # --- Configuration ---
 # Set up logging
@@ -70,12 +71,12 @@ async def health():
     """Health check endpoint for Docker."""
     return {"status": "ok", "whisper_model_loaded": model is not None}
 
-# --- FINAL, HYPER-ROBUST WebSocket Handler ---
+# --- FINAL, CONVERSATIONAL WebSocket Handler ---
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Handles the WebSocket connection with defensive error checking."""
+    """Handles a persistent WebSocket connection for a full conversation."""
     await websocket.accept()
-    logger.info("WebSocket connection accepted.")
+    logger.info("WebSocket connection accepted. Ready for conversation.")
     
     if not model:
         logger.error("WebSocket connection aborted: Whisper model is not loaded.")
@@ -84,69 +85,68 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     try:
+        # --- FIX: Loop to handle multiple interactions in one session ---
         while True:
-            message = await websocket.receive()
-            # This is the crucial new logging line
-            logger.info(f"RAW_MESSAGE_RECEIVED: {message}")
+            # We expect a text message containing the complete base64 audio
+            base64_data = await websocket.receive_text()
+            logger.info("Received complete audio file from client.")
 
-            # Safely get the message type
-            msg_type = message.get("type")
+            audio_bytes = base64.b64decode(base64_data)
+            
+            transcribed_text = ""
+            # Use tempfile to safely handle the audio data
+            with tempfile.NamedTemporaryFile(delete=True, suffix=".ogg") as temp_audio_file:
+                temp_audio_file.write(audio_bytes)
+                temp_audio_file.flush()
 
-            if msg_type == "websocket.disconnect":
-                code = message.get('code', 1000)
-                logger.info(f"Client disconnected with code: {code}")
-                break
-
-            # Safely get the text data from the message
-            data = message.get("text")
-            if data is not None:
-                if data == "EOS":
-                    logger.info("End of audio stream received.")
-                    continue
-
-                # --- Start processing the audio data ---
-                audio_bytes = base64.b64decode(data)
-                audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-                segments, _ = model.transcribe(audio_np, beam_size=5)
+                logger.info(f"Transcribing audio from temporary file: {temp_audio_file.name}")
+                segments, _ = model.transcribe(temp_audio_file.name, beam_size=5)
                 transcribed_text = " ".join([segment.text for segment in segments]).strip()
 
-                if transcribed_text:
-                    logger.info(f"Transcribed: '{transcribed_text}'")
-                    await websocket.send_json({"transcript": transcribed_text})
+            if transcribed_text:
+                logger.info(f"Transcribed: '{transcribed_text}'")
+                await websocket.send_json({"transcript": transcribed_text})
 
-                    # --- Call the LLM ---
-                    logger.info(f"Sending prompt to LLM: '{transcribed_text}'")
-                    try:
-                        llm_payload = {
-                            "model": "mistral",
-                            "prompt": transcribed_text,
-                            "stream": False
-                        }
-                        response = requests.post(LLM_URL, json=llm_payload, timeout=60)
-                        response.raise_for_status()
-                        
-                        llm_data = response.json()
-                        llm_response_text = llm_data.get("response", "No response text found.")
-                        
-                        logger.info(f"LLM Response: '{llm_response_text}'")
-                        await websocket.send_json({"llm_response": llm_response_text})
+                # --- Call the LLM ---
+                logger.info(f"Sending prompt to LLM: '{transcribed_text}'")
+                try:
+                    llm_payload = {
+                        "model": "mistral",
+                        "prompt": transcribed_text,
+                        "stream": False
+                    }
+                    response = requests.post(LLM_URL, json=llm_payload, timeout=60)
+                    response.raise_for_status()
+                    
+                    llm_data = response.json()
+                    llm_response_text = llm_data.get("response", "No response text found.")
+                    
+                    logger.info(f"LLM Response: '{llm_response_text}'")
+                    await websocket.send_json({"llm_response": llm_response_text})
 
-                    except requests.exceptions.RequestException as e:
-                        logger.error(f"Error calling LLM: {e}")
-                        await websocket.send_json({"error": f"Could not connect to LLM: {e}"})
-                    except Exception as e:
-                        logger.error(f"An unexpected error occurred with the LLM call: {e}", exc_info=True)
-                        await websocket.send_json({"error": "An unexpected error occurred with the LLM."})
-                # --- End LLM Call ---
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"Error calling LLM: {e}")
+                    await websocket.send_json({"error": f"Could not connect to LLM: {e}"})
+                except Exception as e:
+                    logger.error(f"An unexpected error occurred with the LLM call: {e}", exc_info=True)
+                    await websocket.send_json({"error": "An unexpected error occurred with the LLM."})
             else:
-                # This will log if the browser sends a message that isn't text (e.g., bytes)
-                logger.warning(f"Received a WebSocket message without a 'text' field: {message}")
+                logger.warning("Transcription resulted in empty text.")
+                await websocket.send_json({"llm_response": "I'm sorry, I didn't catch that. Could you please speak again?"})
 
+    except WebSocketDisconnect:
+        logger.info("WebSocket connection closed cleanly by client.")
     except Exception as e:
         logger.error(f"A critical error occurred in the WebSocket main loop: {e}", exc_info=True)
     finally:
-        if not websocket.client_state == 'DISCONNECTED':
-            await websocket.close()
+        # This block now runs only when the loop is exited (i.e., client disconnects)
+        try:
+            if not websocket.client_state == 'DISCONNECTED':
+                await websocket.close()
+        except RuntimeError as e:
+            if "Unexpected ASGI message 'websocket.close'" in str(e):
+                logger.info("Gracefully handled a redundant close message.")
+            else:
+                raise e
         logger.info("WebSocket connection resources cleaned up.")
 
