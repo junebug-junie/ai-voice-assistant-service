@@ -1,0 +1,52 @@
+version: '3.8'
+
+# This file defines the three services that make up the application.
+# It uses syntax compatible with Docker Compose v1.29.2.
+
+services:
+  llm-brain:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    # --- v1 GPU Access for Ollama ---
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  voice-app:
+    build: .
+    volumes:
+      - ./templates:/app/templates
+    ports:
+      - "8080"
+    depends_on:
+      - llm-brain
+    environment:
+      - LLM_URL=http://llm-brain:11434/api/generate
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE}
+      - WHISPER_DEVICE=${WHISPER_DEVICE}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE}
+      # --- v1 GPU Access for Whisper ---
+      - NVIDIA_VISIBLE_DEVICES=all
+    runtime: nvidia
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+      - "8081:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - voice-app
+
+volumes:
+  ollama_data:
+  caddy_data:
+  caddy_config:
+

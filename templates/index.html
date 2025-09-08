@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice AI Client</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #121212; /* Dark background */
+            color: #e0e0e0; /* Light text */
+        }
+        .container {
+            text-align: center;
+            background: #1e1e1e; /* Darker card background */
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid #333;
+        }
+        h1 {
+            font-size: 28px;
+            color: #ffffff; /* White heading */
+            margin-bottom: 20px;
+        }
+        #speakButton {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 20px;
+            font-size: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 2px 10px rgba(0, 123, 255, 0.3);
+        }
+        #speakButton:hover {
+            background-color: #0056b3;
+        }
+        #speakButton.recording {
+            background-color: #dc3545;
+            transform: scale(1.1);
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #aaaaaa; /* Lighter grey status text */
+            min-height: 24px;
+        }
+        #response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #2a2a2a; /* Dark response box */
+            border-radius: 8px;
+            min-height: 50px;
+            text-align: left;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 1px solid #444;
+        }
+        .icon {
+            width: 40px;
+            height: 40px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Voice AI Assistant</h1>
+        <button id="speakButton">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+        </button>
+        <div id="status">Press the button and start speaking</div>
+        <div id="response">
+            <strong>Response:</strong>
+            <p id="responseText"></p>
+        </div>
+    </div>
+
+    <script>
+        const speakButton = document.getElementById('speakButton');
+        const statusDiv = document.getElementById('status');
+        const responseText = document.getElementById('responseText');
+        let websocket;
+        let mediaRecorder;
+        let audioChunks = [];
+
+        const setupWebSocket = () => {
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            const webSocketUrl = `${proto}//${host}/ws`;
+            
+            websocket = new WebSocket(webSocketUrl);
+
+            websocket.onopen = () => {
+                statusDiv.textContent = 'Ready. Press the button to speak.';
+            };
+
+            websocket.onmessage = (event) => {
+                responseText.textContent = event.data;
+            };
+
+            websocket.onclose = () => {
+                statusDiv.textContent = 'Connection closed. Reconnecting...';
+                setTimeout(setupWebSocket, 2000);
+            };
+
+            websocket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                statusDiv.textContent = 'Connection error. See console.';
+            };
+        };
+
+        const startRecording = async () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Your browser does not support audio recording.');
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        websocket.send(audioBlob);
+                        statusDiv.textContent = 'Processing...';
+                    }
+                };
+
+                mediaRecorder.start();
+                speakButton.classList.add('recording');
+                statusDiv.textContent = 'Recording... Release to stop.';
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                statusDiv.textContent = 'Could not access microphone. Check permissions.';
+            }
+        };
+
+        const stopRecording = () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                speakButton.classList.remove('recording');
+            }
+        };
+
+        speakButton.addEventListener('mousedown', startRecording);
+        speakButton.addEventListener('mouseup', stopRecording);
+        speakButton.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
+        speakButton.addEventListener('touchend', stopRecording);
+
+        window.onload = setupWebSocket;
+    </script>
+
+</body>
+</html>
+
