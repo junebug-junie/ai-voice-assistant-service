@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies directly using the system's pip3.
-# This avoids the "bad interpreter" error from copied venvs.
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
@@ -30,5 +29,4 @@ EXPOSE 8080
 #  CMD curl --fail http://localhost:8080/health || exit 1
 
 # Define the command to run the application using the system's python3 path.
-# We use the full path to uvicorn to be explicit.
 CMD ["/usr/local/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
