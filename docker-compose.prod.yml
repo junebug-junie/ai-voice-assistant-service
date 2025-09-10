@@ -1,0 +1,41 @@
+# configuration for the PUBLIC PRODUCTION environment
+# Caddy server configured for a public domain and Let's Encrypt
+
+version: '3.8'
+
+services:
+  voice-app:
+    depends_on:
+      - coqui-tts
+    environment:
+      - TTS_URL=http://coqui-tts:5002/api/tts
+
+  coqui-tts:
+    image: ghcr.io/coqui-ai/tts-cpu
+    ports:
+      - "5002"
+    environment:
+      - TTS_MODEL_NAME=tts_models/en/ljspeech/vits
+    restart: unless-stopped
+    entrypoint: tts-server
+    networks:
+      - app-net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # standard public web ports
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile # Mount prod Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - voice-app
+    networks:
+      - app-net
+
+volumes:
+  caddy_data:
+  caddy_config:

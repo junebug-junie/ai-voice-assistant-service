@@ -1,0 +1,14 @@
+# Caddy configuration for local development using Tailscale
+# Generates a self-signed certificate
+
+{
+    https_port 8443
+    pki {
+        ca internal
+    }
+}
+
+orion-chrysalis {
+    tls internal
+    reverse_proxy voice-app:8080
+}

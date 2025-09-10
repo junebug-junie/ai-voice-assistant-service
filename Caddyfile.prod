@@ -1,0 +1,8 @@
+# Caddy configuration for public production deployment
+# Replace with actual public domain
+# This will automatically get a trusted SSL certificate from Let's Encrypt
+
+orion.conjourney.net {
+    reverse_proxy voice-app:8080
+}
+

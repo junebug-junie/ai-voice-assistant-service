@@ -1,6 +1,6 @@
-version: '3.8'
+# services common to both development and production environments.
 
-# This is the final, production-ready configuration with the correct entrypoint for Coqui TTS.
+version: '3.8'
 
 services:
   llm-brain:
@@ -24,11 +24,9 @@ services:
       - "8080"
     depends_on:
       llm-brain: { condition: service_started }
-      coqui-tts: { condition: service_started }
     restart: unless-stopped
     environment:
       - LLM_URL=http://llm-brain:11434/api/chat
-      - TTS_URL=http://coqui-tts:5002/api/tts
       - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE}
       - WHISPER_DEVICE=${WHISPER_DEVICE}
       - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE}
@@ -37,36 +35,8 @@ services:
     networks:
       - app-net
 
-  coqui-tts:
-    image: ghcr.io/coqui-ai/tts-cpu
-    ports:
-      - "5002"
-    environment:
-      - TTS_MODEL_NAME=tts_models/en/ljspeech/vits
-    restart: unless-stopped
-    # --- FINAL FIX: Override the default command and run the web server directly ---
-    entrypoint: tts-server
-    networks:
-      - app-net
-
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "8443:8443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - voice-app
-    networks:
-      - app-net
-
 volumes:
   ollama_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   app-net:
