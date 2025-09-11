@@ -20,6 +20,7 @@ services:
     build: .
     volumes:
       - ./templates:/app/templates
+      #- ./static:/app/static
     ports:
       - "8080"
     depends_on:
