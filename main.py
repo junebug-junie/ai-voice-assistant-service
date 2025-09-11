@@ -3,6 +3,7 @@ import logging
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import base64
 import requests
 import json
@@ -41,6 +42,8 @@ try:
         html_content = f.read()
 except FileNotFoundError:
     logger.error(f"CRITICAL: Could not read 'index.html' from '{templates_dir}' directory.")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 async def get():
