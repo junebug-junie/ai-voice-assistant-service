@@ -301,8 +301,8 @@ function createParticles(extra = 0) {
             x: Math.random() * stateVisualizerCanvas.width,
             y: Math.random() * stateVisualizerCanvas.height,
             radius: Math.random() * 2 + 1,
-            baseVx: (Math.random() - 0.5) * 0.5,
-            baseVy: (Math.random() - 0.5) * 0.5,
+            baseVx: (Math.random() - 0.5) * 3.5,
+            baseVy: (Math.random() - 0.5) * 4.5,
             vx: 0,
             vy: 0,
             color: `rgba(147, 197, 253, ${Math.random() * 0.5 + 0.3})`
@@ -314,8 +314,8 @@ function drawOrionState() {
     stateCtx.clearRect(0, 0, stateVisualizerCanvas.width, stateVisualizerCanvas.height);
 
     let speedBoost = 1.0;
-    if (orionState === 'processing') speedBoost = 2.5;
-    else if (orionState === 'speaking') speedBoost = 1.5;
+    if (orionState === 'processing') speedBoost = 6.5;
+    else if (orionState === 'speaking') speedBoost = 3.5;
 
     particles.forEach((p, index) => {
         p.vx = p.baseVx * speedBoost;
@@ -329,11 +329,13 @@ function drawOrionState() {
         if (p.y < 0) p.y = stateVisualizerCanvas.height;
         if (p.y > stateVisualizerCanvas.height) p.y = 0;
 
+        // draw neuron
         stateCtx.beginPath();
         stateCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         stateCtx.fillStyle = p.color;
         stateCtx.fill();
 
+        // draw connections
         for (let j = index + 1; j < particles.length; j++) {
             const other = particles[j];
             const dist = Math.hypot(p.x - other.x, p.y - other.y);

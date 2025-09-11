@@ -48,7 +48,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 async def get():
     return HTMLResponse(content=html_content, status_code=200)
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -77,7 +76,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             audio_bytes = base64.b64decode(base64_data)
 
-            # Tell frontend Orion is processing
+            # 🔥 Tell frontend Orion is processing
             await websocket.send_json({"state": "processing"})
 
             transcribed_text = ""
@@ -126,10 +125,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     logger.info(f"LLM Response: '{llm_text}'")
 
-                    # Token count: prefer Ollama eval_count
+                    # 🔥 Token count: prefer Ollama eval_count
                     token_count = (
                         res_json.get("eval_count")
-                        or res_json.get("eval_duration")
+                        or res_json.get("eval_duration")  # sometimes reported differently
                         or len(llm_text.split())
                     )
 
@@ -141,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     if TTS_URL and llm_text:
                         sentences = re.split(r'(?<=[.!?])\s+', llm_text)
 
-                        # Tell frontend we’re speaking
+                        # 🔥 Tell frontend we’re speaking
                         await websocket.send_json({"state": "speaking"})
 
                         for sentence in sentences:
@@ -163,7 +162,7 @@ async def websocket_endpoint(websocket: WebSocket):
                                 await websocket.send_json({"error": "TTS service failed."})
                                 break
 
-                        # Done speaking, back to idle
+                        # 🔥 Done speaking, back to idle
                         await websocket.send_json({"state": "idle"})
                     else:
                         logger.warning("TTS_URL not set or LLM response was empty. Skipping audio response.")
@@ -183,3 +182,4 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"A critical error occurred: {e}", exc_info=True)
     finally:
         logger.info("WebSocket connection closed.")
+
