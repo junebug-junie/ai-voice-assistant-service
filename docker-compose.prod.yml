@@ -1,14 +1,40 @@
 # configuration for the PUBLIC PRODUCTION environment
 # Caddy server configured for a public domain and Let's Encrypt
 
-version: '3.8'
-
 services:
-  voice-app:
-    depends_on:
-      - coqui-tts
+  llm-brain:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    runtime: nvidia
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    networks:
+      - app-net
+
+  voice-app:
+    build: .
+    volumes:
+      - ./templates:/app/templates
+    ports:
+      - "8080"
+    depends_on:
+      - llm-brain
+      - coqui-tts
+    restart: unless-stopped
+    environment:
+      - LLM_URL=http://llm-brain:11434/api/chat
       - TTS_URL=http://coqui-tts:5002/api/tts
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE}
+      - WHISPER_DEVICE=${WHISPER_DEVICE}
+      - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE}
+      - NVIDIA_VISIBLE_DEVICES=all
+    runtime: nvidia
+    networks:
+      - app-net
 
   coqui-tts:
     image: ghcr.io/coqui-ai/tts-cpu
@@ -37,5 +63,10 @@ services:
       - app-net
 
 volumes:
+  ollama_data:
   caddy_data:
   caddy_config:
+
+networks:
+  app-net:
+    driver: bridge
