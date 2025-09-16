@@ -1,8 +1,3 @@
-# configuration for the LOCAL DEVELOPMENT environment
-# starts the Caddy server configured for Tailscale's internal HTTPS
-
-version: '3.8'
-
 services:
   voice-app:
     depends_on:
@@ -25,9 +20,9 @@ services:
     image: caddy:2-alpine
     restart: unless-stopped
     ports:
-      - "8443:8443" # non-standard port for local dev
+      - "8443:8443" # dev HTTPS on non-standard port
     volumes:
-      - ./Caddyfile.dev:/etc/caddy/Caddyfile # mount for dev Caddyfile
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base.en")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
 WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
+LLM_MODEL = os.getenv("LLM_MODEL", "mistral")
 LLM_URL = os.getenv("LLM_URL")
 TTS_URL = os.getenv("TTS_URL")
 
@@ -103,13 +104,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 try:
                     llm_payload = {
-                        "model": "mistral",
+                        "model": LLM_MODEL,
                         "messages": conversation_history,
                         "stream": False,
                         "options": {"temperature": temperature}
                     }
                     logger.info(
-                        f"Calling LLM with temperature: {temperature} "
+                        f"Calling LLM '{LLM_MODEL}' with temperature: {temperature} "
                         f"and context length: {len(conversation_history)}"
                     )
 

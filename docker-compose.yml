@@ -1,7 +1,3 @@
-# services common to both development and production environments.
-
-version: '3.8'
-
 services:
   llm-brain:
     image: ollama/ollama
@@ -20,7 +16,6 @@ services:
     build: .
     volumes:
       - ./templates:/app/templates
-      #- ./static:/app/static
     ports:
       - "8080"
     depends_on:
@@ -28,6 +23,7 @@ services:
     restart: unless-stopped
     environment:
       - LLM_URL=http://llm-brain:11434/api/chat
+      - LLM_MODEL=${LLM_MODEL}
       - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE}
       - WHISPER_DEVICE=${WHISPER_DEVICE}
       - WHISPER_COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE}
@@ -42,4 +38,3 @@ volumes:
 networks:
   app-net:
     driver: bridge
-
