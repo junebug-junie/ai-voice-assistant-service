@@ -1,14 +1,20 @@
 services:
   llm-brain:
     image: ollama/ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
     restart: unless-stopped
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
     networks:
       - app-net
 
