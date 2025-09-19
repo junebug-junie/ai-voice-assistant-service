@@ -1,129 +1,273 @@
-Orion AI Voice System
+# Orion AI Voice System
 
-This service is a production-grade, self-hosted voice AI assistant. It leverages a multi-container Docker architecture to create a scalable, high-performance system that can run on any machine with a modern NVIDIA GPU. The entire application is designed to be securely accessible over a private Tailscale mesh network for development or deployed publicly to the web.`For more information about the motivation by Orion as a voice system, see https://github.com/junebug-junie/Orion-Sapienform
-Core Architecture
+A self-hosted, production-grade **voice AI assistant**. It runs as a small fleet of Docker containers on a single NVIDIA-GPU machine. For local/dev on a headless server, you’ll usually reach it via an **SSH port-forward** to Caddy on port 80; for production you’ll use **Caddy + Let’s Encrypt** on your public domain.
 
-The application is composed of four distinct, containerized services managed by Docker Compose, following modern microservice best practices:
+For background/motivation, see: <https://github.com/junebug-junie/Orion-Sapienform>
 
-    Voice App (voice-app): The main FastAPI application that serves the user interface, handles WebSocket communication for real-time audio, and orchestrates the other services. It uses Faster-Whisper on the GPU for high-speed, accurate speech-to-text transcription.
+---
 
-    LLM Brain (llm-brain): Runs the Ollama service, which downloads and serves the Mistral 7B Large Language Model. This service acts as the conversational "brain" of the assistant, also leveraging the GPU for fast inference.
+## Core Architecture
 
-    Text-to-Speech (coqui-tts): A robust, self-contained Coqui TTS service that generates high-quality, natural-sounding voice responses. This ensures a consistent and pleasant audio experience for all users.
+**Services (Docker Compose):**
 
-    Web Proxy (caddy): A production-ready Caddy web server that acts as a reverse proxy. It automatically handles HTTPS, providing the secure connection necessary for browsers to grant microphone access over the network.
+- **voice-app** — FastAPI app (UI + WebSocket audio). Uses **Faster-Whisper** on GPU for STT.
+- **llm-brain** — **Ollama** server for the LLM (Mistral/Mixtral/etc.). Uses GPU for inference.
+- **coqui-tts** — **Coqui TTS** service for high-quality speech synthesis.
+- **caddy** — **Caddy** reverse proxy for dev/prod routing and HTTPS in production.
 
-Features
+> App code under `scripts/` has been refactored into multiple files.
 
-    Real-Time Voice Interaction: Press and hold the microphone button to speak and have a continuous, low-latency conversation.
+---
 
-    High-Quality Local AI: All AI processing (Speech-to-Text and LLM) runs locally on your own hardware, ensuring privacy and speed.
+## Features
 
-    Natural Voice Responses: Integrated Coqui TTS engine provides a consistent, high-quality female voice for the assistant.
+- Push-to-talk **real-time voice** interaction  
+- **Local AI** (STT + LLM on your hardware) for privacy & speed  
+- **Natural TTS** via Coqui  
+- **Dynamic UI**: Orion state visualizer + speech visualizer  
+- **Settings**: persona (system prompt), temperature, context length, speech rate  
+- **Conversation controls**: copy transcript, clear history  
+- **Interruptible speech** (stop mid-utterance)
 
-    Dynamic UI:
+---
 
-        "Orion's State" Visualizer: A "Winamp-style" geometric visualization that dynamically changes to reflect Orion's current state (idle, listening, processing, speaking).
+## Prerequisites
 
-        Speech Visualizer: A real-time waveform or frequency bar visualizer that syncs with Orion's spoken response.
+- Linux host with an **NVIDIA GPU** (driver installed)
+- **Docker** + **Docker Compose v2**
+- **NVIDIA Container Toolkit** (GPU passthrough to containers)
+- **Dev (headless)**: SSH access from your laptop to the server
+- **Prod**: public domain, DNS A record to your server’s public IP, router/NAT forwards for **80/443**, firewall open for **80/443**
 
-    Full User Control: A dedicated settings panel allows for real-time adjustment of:
+---
 
-        Orion's Persona: A system prompt to control the AI's personality and behavior.
+## Project Layout
 
-        LLM Temperature: Adjust the creativity of the model's responses.
+```
+caddy/
+  Caddyfile.dev
+  Caddyfile.prod
+docker-compose.yml
+Dockerfile
+Makefile
+README.md
+requirements.txt
+scripts/           # refactored multi-file app logic
+static/
+templates/
+```
 
-        Context Length: Control the conversation's memory.
+---
 
-        Speech Speed: Change the playback rate of the TTS audio.
+## First-Time Setup
 
-    Conversation Management: Easily copy the conversation transcript or clear the history.
+1. **Clone/place files** on the server.
+2. **Caddy configs** (in repo):
+   - `caddy/Caddyfile.dev` — plain HTTP on :80 (perfect for SSH port-forward)
+     ```caddy
+     :80 {
+         reverse_proxy http://voice-app:8080
+     }
+     ```
+   - `caddy/Caddyfile.prod` — public domain w/ auto-HTTPS
+     ```caddy
+     orion.conjourney.net {
+         reverse_proxy http://voice-app:8080
+     }
+     ```
+   The `docker-compose.yml` mounts `./caddy/Caddyfile.${MODE:-dev}` to `/etc/caddy/Caddyfile`.
+3. **Build images (first time)**  
+   ```bash
+   docker compose build
+   ```
 
-    Interruptible Speech: A "Stop" button appears while Orion is speaking, allowing you to interrupt long responses.
+---
 
-How to Run This Project
+## Runbooks
 
-This project is designed to be run in one of two modes: Development (for private access on your Tailscale network) or Production (for public access on the internet).
-Prerequisites
+### A) Development (headless server, SSH tunnel to Caddy on :80)
 
-    A Linux host with a modern NVIDIA GPU.
+**Start dev (attached logs):**
+```bash
+MODE=dev docker compose up --build
+# Ctrl+C stops the stack
+```
 
-    Docker and Docker Compose (v1.29.2+) installed.
+**From your laptop**, create a tunnel to the server:
+```bash
+ssh -N -L 18080:127.0.0.1:80 janus@<server-lan-ip>
+```
 
-    The NVIDIA Container Toolkit installed to allow Docker access to the GPU.
+Open: **http://localhost:18080**
 
-    Tailscale installed and running on the host machine.
+**Pull an LLM model (first time per volume):**
+```bash
+docker compose exec llm-brain ollama pull mistral
+# or: docker compose exec llm-brain ollama pull mixtral
+```
 
-First-Time Setup (Common to both modes)
+**Logs (compose-native):**
+```bash
+docker compose logs -f voice-app caddy llm-brain coqui-tts redis subscriber
+# or per service:
+docker compose logs -f voice-app
+```
 
-    Place Project Files: Ensure all project files (docker-compose.yml, docker-compose.dev.yml, Dockerfile, etc.) are in a single directory on your host machine.
+**Stop dev:**
+```bash
+docker compose down --remove-orphans
+```
 
-    Create .env file: Copy the .env.example to .env and fill in your desired Whisper model settings (e.g., WHISPER_MODEL_SIZE=distil-medium.en).
+---
 
-    Build the Voice App Image: Run docker-compose build to build the main voice-app image. This only needs to be done once, or whenever you change main.py or the Dockerfile.
+### B) Production (public domain with auto-HTTPS)
 
-A) Running in Development Mode (Tailscale)
+**Requirements**
+- DNS A record: `orion.conjourney.net` → your server’s public IP
+- Ports **80/443** reachable (router/NAT + firewall)
+- Ensure nothing else (e.g., Tailscale Funnel/Serve) is binding 80/443
 
-This mode allows you to access Orion from any device on your private Tailscale network.
+**Start prod (detached):**
+```bash
+MODE=prod docker compose up -d --build
+```
 
-    Configure Caddy for Dev:
-    Edit the Caddyfile.dev file and replace orion-chrysalis with your server's actual Tailscale machine name if it is different.
+Open: **https://orion.conjourney.net**
 
-    Launch the Dev Stack:
-    From your project directory, run this command. It merges the base docker-compose.yml with the docker-compose.dev.yml override file.
+**Pull an LLM model (first time per volume):**
+```bash
+docker compose exec llm-brain ollama pull mistral
+```
 
-    docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+**Stop prod:**
+```bash
+docker compose down --remove-orphans
+```
 
-    Load the LLM Model (One-time setup per volume):
+---
 
-    docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec llm-brain ollama pull mistral
+## Makefile (handy targets)
 
-    Connect:
-    You can now access the application from any other device on your Tailscale network at:
-    https://<your-tailscale-hostname>:8443
+Add these to `Makefile` if you want one-liners:
 
-    (Note: Your browser will show a one-time security warning because the SSL certificate is self-signed. You must click "Advanced" and "Accept the Risk and Continue".)
+```makefile
+# Dev attached (pretty consolidated logs)
+start-dev:
+	@MODE=dev docker compose up --build
 
-B) Running in Production Mode (Public Web App)
+# Dev detached, then follow logs
+start-dev-follow:
+	@MODE=dev docker compose up -d --build
+	@docker compose logs -f --tail=200
 
-This mode deploys Orion to the public internet, accessible from anywhere.
+# Prod detached
+start-prod:
+	@MODE=prod docker compose up -d --build
 
-Prerequisites for Production:
+# Generic logs (all services)
+LOG_TAIL ?= 200
+logs:
+	@docker compose logs -f --tail=$(LOG_TAIL)
 
-    You must have a public domain name (e.g., your-cool-domain.com).
+# Per-service logs: make log SVC=voice-app
+SVC ?= voice-app
+log:
+	@docker compose logs -f --tail=$(LOG_TAIL) $(SVC)
 
-    You must have a DNS "A" record pointing a subdomain (e.g., orion) to the public IP address of your chrysalis server.
+# Stop / Nuke
+stop:
+	@docker compose down --remove-orphans
 
-    Your internet router must have port forwarding rules for ports 80 and 443 pointing to your chrysalis server's local IP address.
+nuke:
+	@docker compose down --volumes --remove-orphans || true
+	@docker network prune -f || true
+```
 
-    Your chrysalis server's firewall must allow traffic on ports 80 and 443 (sudo ufw allow 80/tcp, sudo ufw allow 443/tcp).
+---
 
-Deployment Steps:
+## LLM Notes & Performance (Ollama)
 
-    Configure Caddy for Prod:
-    Edit the Caddyfile.prod file (currently open in the Canvas) and replace orion.your-cool-domain.com with your actual public domain.
+- **List models**:
+  ```bash
+  docker compose exec llm-brain ollama list
+  ```
+- **Pull a model**:
+  ```bash
+  docker compose exec llm-brain ollama pull mistral
+  ```
+- **Tune (optional, via Modelfile)** — e.g., reduce VRAM & latency:
+  ```Dockerfile
+  FROM mistral
+  PARAMETER quantization q4_K_M
+  PARAMETER gpu_layers 20
+  PARAMETER num_batch 64
+  ```
+  Then inside the container:
+  ```bash
+  docker compose exec llm-brain ollama create mistral-tuned -f /root/.ollama/models/Modelfile
+  ```
 
-    Launch the Prod Stack:
-    This command merges the base docker-compose.yml with the docker-compose.prod.yml override file.
+---
 
-    docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+## Troubleshooting
 
-    Load the LLM Model (One-time setup per volume):
+**Caddyfile parse error**
+```
+Error: Unexpected next token after '{'
+```
+Cause: env-expanded multiline blocks.  
+Fix: use separate files `caddy/Caddyfile.dev` and `caddy/Caddyfile.prod` as above.
 
-    docker-compose -f docker-compose.yml -f docker-compose.prod.yml exec llm-brain ollama pull mistral
+**Ports busy (80/443)**
+```
+failed to bind host port ... address already in use
+```
+Check:
+```bash
+sudo lsof -i :80 -P -n
+sudo lsof -i :443 -P -n
+```
+Disable Tailscale Serve/Funnel if running:
+```bash
+sudo tailscale serve reset || true
+sudo tailscale funnel --https=443 off || true
+sudo tailscale funnel --https=8443 off || true
+```
+Restart Caddy:
+```bash
+docker compose restart caddy
+```
 
-    Go Live:
-    You can now access your application from anywhere in the world at your secure, public domain:
-    https://orion.your-cool-domain.com
+**Let’s Encrypt rate limits (HTTP 429)**  
+Wait for cooldown (see Caddy logs). To test safely, keep using **dev** first; for alt CAs/staging, create a separate prod Caddyfile variant.
 
-Switching Environments
+**Bind-mount error (file vs directory)**
+```
+Are you trying to mount a directory onto a file?
+```
+Ensure `caddy/Caddyfile.dev` & `.prod` exist as **files**. Use long bind syntax in compose.
 
-You cannot run both dev and prod at the same time. To switch, you must first tear down the running environment.
+**App is healthy in container but not on host**  
+Remember the host port for `voice-app` might be random unless pinned. In dev we route through Caddy on port 80; otherwise:
+```bash
+docker compose port voice-app 8080  # shows host mapping
+```
 
-To stop the dev environment:
+**Quick health check from inside container**
+```bash
+docker compose exec voice-app curl -sSf http://localhost:8080/docs | head -n 10
+```
 
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+---
 
-To stop the prod environment:
+## Security
 
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml down
+- Dev uses **plain HTTP** internally and an **SSH tunnel** from your laptop — simple and private.
+- Prod uses **Caddy auto-HTTPS** with trusted certificates.
+- If you prefer a private mesh in dev, you can use **Tailscale Serve** instead of SSH port-forwarding (disabled by default to avoid port conflicts).
+
+---
+
+## License
+
+This repository includes third-party components (Coqui TTS, Ollama model weights, etc.) with their own licenses. Review those licenses before commercial use.

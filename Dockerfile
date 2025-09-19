@@ -24,9 +24,5 @@ COPY . .
 # Expose the port the application will run on
 EXPOSE 8080
 
-# The health check is disabled for now to ensure startup.
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-#  CMD curl --fail http://localhost:8080/health || exit 1
-
 # Define the command to run the application using the system's python3 path.
-CMD ["/usr/local/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["/usr/local/bin/uvicorn", "scripts.main:app", "--host", "0.0.0.0", "--port", "8080"]
