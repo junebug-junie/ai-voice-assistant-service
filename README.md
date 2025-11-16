@@ -1,6 +1,6 @@
-# Orion AI Voice System
+# AI Voice Assistant System
 
-A self-hosted, production-grade **voice AI assistant**. It runs as a small fleet of Docker containers on a single NVIDIA-GPU machine. For local/dev on a headless server, you’ll usually reach it via an **SSH port-forward** to Caddy on port 80; for production you’ll use **Caddy + Let’s Encrypt** on your public domain.
+A self-hosted **voice AI assistant**. It runs as a small fleet of Docker containers on a single NVIDIA-GPU machine. For local/dev on a headless server, you’ll usually reach it via an **SSH port-forward** to Caddy on port 80; for production you’ll use **Caddy + Let’s Encrypt** on your public domain.
 
 For background/motivation, see: <https://github.com/junebug-junie/Orion-Sapienform>
 
@@ -14,8 +14,6 @@ For background/motivation, see: <https://github.com/junebug-junie/Orion-Sapienfo
 - **llm-brain** — **Ollama** server for the LLM (Mistral/Mixtral/etc.). Uses GPU for inference.
 - **coqui-tts** — **Coqui TTS** service for high-quality speech synthesis.
 - **caddy** — **Caddy** reverse proxy for dev/prod routing and HTTPS in production.
-
-> App code under `scripts/` has been refactored into multiple files.
 
 ---
 
@@ -52,7 +50,7 @@ Dockerfile
 Makefile
 README.md
 requirements.txt
-scripts/           # refactored multi-file app logic
+scripts/
 static/
 templates/
 ```
@@ -71,7 +69,7 @@ templates/
      ```
    - `caddy/Caddyfile.prod` — public domain w/ auto-HTTPS
      ```caddy
-     orion.conjourney.net {
+     assistant.yourdomain.net {
          reverse_proxy http://voice-app:8080
      }
      ```
@@ -95,7 +93,7 @@ MODE=dev docker compose up --build
 
 **From your laptop**, create a tunnel to the server:
 ```bash
-ssh -N -L 18080:127.0.0.1:80 janus@<server-lan-ip>
+ssh -N -L 18080:127.0.0.1:80 user@<server-lan-ip>
 ```
 
 Open: **http://localhost:18080**
@@ -123,7 +121,7 @@ docker compose down --remove-orphans
 ### B) Production (public domain with auto-HTTPS)
 
 **Requirements**
-- DNS A record: `orion.conjourney.net` → your server’s public IP
+- DNS A record: `assistant.yourdomain.net` → your server’s public IP
 - Ports **80/443** reachable (router/NAT + firewall)
 - Ensure nothing else (e.g., Tailscale Funnel/Serve) is binding 80/443
 
@@ -132,7 +130,7 @@ docker compose down --remove-orphans
 MODE=prod docker compose up -d --build
 ```
 
-Open: **https://orion.conjourney.net**
+Open: **https://assistant.yourdomain.net**
 
 **Pull an LLM model (first time per volume):**
 ```bash
